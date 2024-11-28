@@ -90,7 +90,7 @@ class ReplayBufferReservoir:
         return DataLoader(combined_dataset, batch_size=current_loader.batch_size, shuffle=True)
 
 
-def train_model(model, data_loaders, tasks_test, optimizer, criterion, epochs=5, replay_buffer=None, path="test_animation"):
+def train_model(model, data_loaders, tasks_test, optimizer, criterion, epochs=5, replay_buffer=None, path="test_animation", animation=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     data_anim = []
@@ -139,6 +139,9 @@ def train_model(model, data_loaders, tasks_test, optimizer, criterion, epochs=5,
     
     with open(f'animations/{path}.pkl', 'wb') as file:
         pickle.dump(data_anim, file)
+    
+    if animation:
+        create_animation(path)
 
 def create_animation(path):
     with open(f'animations/{path}.pkl', 'rb') as file:
