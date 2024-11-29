@@ -40,8 +40,8 @@ class SimpleCNN(nn.Module):
         self.conv1 = nn.LazyConv2d(16, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.LazyLinear(128)
-        self.bottleneck = nn.Linear(128, 2)  # Bottleneck layer
+        self.fc1 = nn.LazyLinear(2)
+        #self.bottleneck = nn.Linear(128, 2)  # Bottleneck layer
         self.fc2 = nn.Linear(2, 10)
         self.relu = nn.ReLU()
 
@@ -49,8 +49,9 @@ class SimpleCNN(nn.Module):
         x = torch.relu(self.conv1(x))
         x = self.pool(torch.relu(self.conv2(x)))
         x = x.view(x.size(0), -1)  
-        x = self.relu(self.fc1(x))
-        features = self.bottleneck(x)
+
+        #x = self.relu(self.fc1(x))
+        features = self.fc1(x)
         out = self.fc2(features)
         return out, features
 
