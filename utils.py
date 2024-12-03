@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset, Dataset
 
-def split_mnist_by_classes(dataset, num_tasks=5):
+def split_dataset_by_classes(dataset, num_tasks=5):
     class_indices = {i: [] for i in range(10)}
     for idx, (_, label) in enumerate(dataset):
         class_indices[label].append(idx)
@@ -22,7 +22,25 @@ def split_mnist_by_classes(dataset, num_tasks=5):
         task_datasets.append(Subset(dataset, indices))
     return task_datasets
 
-
+def get_interim_results(test_loaders, model, device):
+                labs, feas, test_accs = [], [], []
+                for test_loader in test_loaders:
+                    correct, total = 0, 0
+                    lab, fea = [], [] 
+                    with torch.no_grad():
+                        for images, labels in test_loader:
+                            images, labels = images.to(device), labels.to(device)
+                            outputs, features = model(images)
+                            _, predicted = torch.max(outputs, 1)
+                            total += labels.size(0)
+                            correct += (predicted == labels).sum().item()
+                            lab.append(labels)
+                            fea.append(features)
+                    test_accs.append(100 * correct / total)
+                    labs.append(torch.concat(lab).cpu().numpy())
+                    feas.append(torch.concat(fea).cpu().numpy())
+                return np.concatenate(labs), np.concatenate(feas), test_accs
+            
 class CustomDataset(Dataset):
     def __init__(self, inputs, labels):
         self.inputs = inputs
@@ -33,27 +51,6 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, index):
         return self.inputs[index], self.labels[index].item() # (tensor, int)
-
-class SimpleCNN(nn.Module):
-    def __init__(self, input_dim=1):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.LazyConv2d(16, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.LazyLinear(2)
-        #self.bottleneck = nn.Linear(128, 2)  # Bottleneck layer
-        self.fc2 = nn.Linear(2, 10)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = self.pool(torch.relu(self.conv2(x)))
-        x = x.view(x.size(0), -1)  
-
-        #x = self.relu(self.fc1(x))
-        features = self.fc1(x)
-        out = self.fc2(features)
-        return out, features
 
 class ReplayBufferReservoir:
     def __init__(self, capacity=500):
@@ -91,14 +88,14 @@ class ReplayBufferReservoir:
         return DataLoader(combined_dataset, batch_size=current_loader.batch_size, shuffle=True)
 
 
-def train_model(model, data_loaders, tasks_test, optimizer, criterion, epochs=5, replay_buffer=None, path="test_animation", animation=True):
+def train_model(model, train_loaders, test_loaders, optimizer, criterion, epochs=5, replay_buffer=None, path="test_animation", animation=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     data_anim = []
     
-    for task_id, loader in enumerate(data_loaders):
+    for task_id, loader in enumerate(train_loaders):
         print(f"Training on Task {task_id + 1}")
-        for epoch in range(epochs):
+        for _ in range(epochs):
             model.train()
             total_loss = 0.0
 
@@ -114,26 +111,8 @@ def train_model(model, data_loaders, tasks_test, optimizer, criterion, epochs=5,
                 optimizer.step()
                 total_loss += loss.item()
             
-            labs, feas = [], []
-            for i in range(task_id, 5):
-                test_datasets = torch.utils.data.ConcatDataset([tasks_test[i] for i in range(task_id+1)])
-                test_loader = DataLoader(test_datasets, batch_size=100, shuffle=True)
-                correct = 0
-                total = 0
-                lab, fea = [], []
-                with torch.no_grad():
-                    for images, labels in test_loader:
-                        images, labels = images.to(device), labels.to(device)
-                        outputs, features = model(images)
-                        _, predicted = torch.max(outputs, 1)
-                        total += labels.size(0)
-                        correct += (predicted == labels).sum().item()
-                        lab.append(labels)
-                        fea.append(features)
-                test_acc = 100 * correct / total
-                labs.append(torch.concat(lab).cpu().numpy())
-                feas.append(torch.concat(fea).cpu().numpy())
-            data_anim.append((np.concatenate(labs),np.concatenate(feas)))            
+                labs, feas, test_accs = get_interim_results(test_loaders[:task_id+1], model, device)
+                data_anim.append((labs, feas , test_accs))            
 
         if replay_buffer is not None:
             replay_buffer.update(loader)
