@@ -4,6 +4,6 @@ This repository was created to visualize the learning dynamics of neural network
 
 ![Learning Dynamics](assets/FMNIST_vanilla_bottleneck.gif)
 
-## Demo Expirience replay
+## Demo Experience replay
 
 ![Learning Dynamics with expirience replay](assets/FMNIST_expireince_replay_bottleneck.gif)
